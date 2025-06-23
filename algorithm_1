@@ -1,0 +1,198 @@
+%%time
+state = "IR"
+if state == "SS":
+    data_from = "AA"
+    l_Range = range(1, 31)
+    i_Range = range(5, 120)
+else:
+    data_from = "NA"
+    #l_Range = chain(range(1, 2), range(3, 10), range(17, 18), range(19, 25), range(26, 31)) # 2와 18, 25는 inrush가 없다. Conf B도 inrush가 없다.
+    l_Range = chain(range(1, 2), range(3, 5), range(7, 10), range(17, 18), range(19, 25), range(26, 31))
+    #l_Range = range(1, 2)
+    IR_start = 0
+    i_Range = range(IR_start, 120)
+
+total_period = 5
+index_number = 120 - total_period
+m_d = 4    # 
+r_d = 0.3
+m_m = 7    # 
+r_m = 0.4
+m_p = 2
+threshold_d = 0.4 # 0.4
+threshold_m = 0.12
+threshold_p = 0.347 # PermEn용 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+arc_count_threshold = 6
+state_processing_length = 15
+State_flag = 0
+arc_count = 0
+State_count = 0
+for l in l_Range:          # l : Load loop{l:02d}, r : trial loop{r:02d}, i : period loop 
+    if l in [4, 13, 20, 27]:
+        r_Range = range(1,7)
+    else:
+        r_Range = range(1,3)
+    for r in r_Range:       # l : Load loop(l:02d), r : trial loop(r:02d), i : period loop 
+        pattern_df = f"PI_{data_from}{l:02d}_{state}_R{r:02d}"
+        matching_columns_df = df_dict[f'df_{state}_{total_period}p'].filter(regex=f"^{pattern_df}").columns
+
+        if len(matching_columns_df) > 0:
+            selected_column_df = matching_columns_df[0]
+            if state == "SS":
+                i_Range = range(5, 120)
+            else:            
+                IR_start = int(selected_column_df.split("_")[4]) + 4
+                if l in range(17,24):
+                    i_Range = range(5, 120)
+                else:
+                    i_Range = range(IR_start, 120)
+            column_index = df_dict[f'df_{state}_{total_period}p'].columns.get_loc(selected_column_df)
+            df_dict[f'df_{state}_{total_period}p'].insert(column_index + 1, f"s_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p", 0)
+            df_dict[f'df_{state}_{total_period}p'].insert(column_index + 2, f"c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p", 0)
+            df_dict[f'df_{state}_{total_period}p'].insert(column_index + 3, f"l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p", 0)
+            df_dict[f'df_{state}_{total_period}p'].insert(column_index + 4, f"sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p", 0)
+        else:
+            raise ValueError(f"No matching columns found for pattern: {pattern}")
+        State_flag = 0
+        arc_count = 0
+        State_count = 0
+        print(f'{data_from}{l:02d}_R{r:02d} start!')
+        for i in i_Range: # l : Load loop(l:02d), r : trial loop(r:02d), i : period loop range(5,120)
+
+            pattern = f"PI_{data_from}{l:02d}_{state}_R{r:02d}"
+
+            matching_columns = df_dict[f'df_{state}_{total_period}p'].filter(regex=f"^{pattern}").columns
+
+            if len(matching_columns) > 0:
+                selected_column = matching_columns[0]
+                Period_index = df_dict[f'df_{state}_{total_period}p'][selected_column][i-5]
+            else:
+                raise ValueError(f"No matching columns found for pattern: {pattern}")
+                
+            #if df_dict[f'df_{state}_{total_period}p'][f'Am_{data_from}{l:02d}_{state}_R{r:02d}_m{m_m}_r{r_m}_{total_period}p'][i-5]<threshold_m:
+            if df_dict[f'df_{state}_{total_period}p'][f'Pe_{data_from}{l:02d}_{state}_R{r:02d}_m{m_p}_{total_period}p'][i-5] < threshold_p:
+                if State_flag == 1:
+                    State_count = State_count + 1
+                    if State_count == state_processing_length:
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                        print(f"{Period_index} : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                        state_processing_length = 15
+                        State_flag = 0
+                        arc_count = 0
+                        State_count = 0
+                        continue
+                    else:
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                        print(f"{Period_index} : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                        continue
+                else:
+                    df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                    df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                    df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                    df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                    print(f"{Period_index} : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                    continue
+                    
+            else:
+                #if df_dict[f'df_{state}_{total_period}p'][f'AD_{data_from}{l:02d}_{state}_R{r:02d}_m{m_d}_r{r_d}_{total_period}p'][i-5]>threshold_d:
+                if df_dict[f'df_{state}_{total_period}p'][f'Am_{data_from}{l:02d}_{state}_R{r:02d}_m{m_m}_r{r_m}_{total_period}p'][i-5] > threshold_m:
+                    # Am도 아크로 판단하고 AD도 아크로 판단한 경우
+                    if State_flag == 1:
+                        arc_count = arc_count + 2
+                        State_count = State_count + 1
+                        state_processing_length = state_processing_length - 1
+                        if arc_count > arc_count_threshold:
+                            State_flag = 2
+                            df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                            df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                            df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                            df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                            print(f"{Period_index}_2pt : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                            print('Arc detected!')
+                            state_processing_length = 15
+                            State_flag = 0
+                            arc_count = 0
+                            State_count = 0
+                            break
+                        else:
+                            if State_count >= state_processing_length:
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                                print(f"{Period_index}_2pt : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                                state_processing_length = 15
+                                State_flag = 0
+                                arc_count = 0
+                                State_count = 0
+                                continue
+                            else:
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                                print(f"{Period_index}_2pt : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                                continue
+                    else:
+                        State_flag = 1
+                        arc_count = arc_count + 2
+                        State_count = State_count + 1
+                        state_processing_length = state_processing_length - 1
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                        print(f"{Period_index}_2pt : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                        continue
+                else: # Am은 아크로 판단했는데 AD는 아크로 판단하지 않은 경우
+                    if State_flag == 1:
+                        arc_count = arc_count + 1
+                        State_count = State_count + 1
+                        if arc_count > arc_count_threshold:
+                            State_flag = 2
+                            df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                            df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                            df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                            df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                            print(f"{Period_index}_1pt : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                            print('Arc detected!')
+                            state_processing_length = 15
+                            State_flag = 0
+                            arc_count = 0
+                            State_count = 0
+                            break
+                        else:
+                            if State_count >= state_processing_length:
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                                print(f"{Period_index}_1pt : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                                state_processing_length = 15
+                                State_flag = 0
+                                arc_count = 0
+                                State_count = 0
+                                continue
+                            else:
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                                df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                                print(f"{Period_index}_1pt : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                                continue
+                    else:
+                        State_flag = 1
+                        arc_count = arc_count + 1
+                        State_count = State_count + 1
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f's_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_flag
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'c_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = arc_count
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'l_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = State_count
+                        df_dict[f'df_{state}_{total_period}p'].at[i-5, f'sp_{data_from}{l:02d}_{state}_R{r:02d}_{total_period}p'] = state_processing_length
+                        print(f"{Period_index}_1pt : state_flag:{State_flag},arc_count:{arc_count},State_count:{State_count}")
+                        continue
